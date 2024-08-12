@@ -1,4 +1,5 @@
-
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import random
 import numpy as np
 from sklearn.metrics import f1_score, recall_score
@@ -15,7 +16,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 import json
 import pickle
-import os
 import pandas
 import matplotlib.pyplot as plt
 # plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -110,21 +110,15 @@ class DataUpdate(object):
         self.metric = {}
     def update(self,**kwargs):
         for key,value in kwargs.items():
+            if self.sw is not None:
+                self.sw.add_scalar(str(key),value,self.epoch)
+                self.epoch +=1 
             if key not in self.metric.keys():
                 self.metric[str(key)] = []
             if isinstance(value,list):
                 self.metric[str(key)].extend(value)
             else:
-                self.metric[str(key)].append(value)
-        if self.sw is not None:
-            self.updateTensorboard(self.epoch,kwargs)
-            self.epoch +=1
-    def updateTensorboard(self,epoch,**kwargs):
-        for key,value in kwargs.items():
-            self.sw.add_scalar(str(key),value,epoch)   
-        # writer.add_scalar('trainloss',train_loss,epoch)     
-    def updatemodel(self,model,inputsize):
-        self.sw.add_graph(model,input_to_model = inputsize,verbose = False)
+                self.metric[str(key)].append(value)  
     def _save_csv(self,result_path):
         To_save_csv(self.metric,result_path)
 
@@ -305,9 +299,9 @@ def Train_epoch(model,
             loop.set_postfix(
                 {
                    'loss':loss/(index+1),
-                   'accuracy':MetricMonitors._Accuracy_,
-                   'recallscore':MetricMonitors._Recallscore_,
-                   'f1score':MetricMonitors._F1score_
+                   'Acc':MetricMonitors._Accuracy_,
+                   'Recall':MetricMonitors._Recallscore_,
+                   'F1':MetricMonitors._F1score_
                 }
             )
     loss = loss/len(train_data_loader)
@@ -338,9 +332,9 @@ def Evaluate_epoch(model,
                 loss+=loss_present.item()
                 loop_.set_postfix({
                     'loss':loss/(index+1),
-                    'accuracy':MetricMonitors._Accuracy_,
-                    'recallscore':MetricMonitors._Recallscore_,
-                    'f1score':MetricMonitors._F1score_
+                    'Acc':MetricMonitors._Accuracy_,
+                    'Recall':MetricMonitors._Recallscore_,
+                    'F1':MetricMonitors._F1score_
                 })
     loss = loss/len(val_data_loader)
     acc = MetricMonitors._Accuracy_
@@ -405,8 +399,7 @@ def Train(model,
     # global best_acc
     best_acc=0
     trainmetric = DataUpdate(writer_path=writer_path)
-    trainmetric.updatemodel(model,inputsize=inputsize)
-    summary(model,inputsize[0])
+    summary(model,inputsize)
     for epoch in range(1,epochs+1):
         train_start = datetime.datetime.now().timestamp()
         MetricMonitors = MetricMonitor()
