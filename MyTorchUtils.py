@@ -97,7 +97,14 @@ class MetricMonitor(object):
                 f'Accuracy:{self._Accuracy_}',f'Recall:{self._Recallscore_}',f'F1:{self._F1score_}'
         ])
 class DataUpdate(object):
-    def __init__(self):
+    def __init__(self,epoch:int = 1,writer_path = None):
+        self.epoch = epoch
+        self.sw  =None
+        if writer_path is not None:
+            try:
+                self.sw = SummaryWriter(writer_path)
+            except:
+                print('日志创建失败！')
         self.reset()
     def reset(self):
         self.metric = {}
@@ -109,6 +116,18 @@ class DataUpdate(object):
                 self.metric[str(key)].extend(value)
             else:
                 self.metric[str(key)].append(value)
+        if self.sw is not None:
+            self.updateTensorboard(self.epoch,kwargs)
+            self.epoch +=1
+    def updateTensorboard(self,epoch,**kwargs):
+        for key,value in kwargs.items():
+            self.sw.add_scalar(str(key),value,epoch)   
+        # writer.add_scalar('trainloss',train_loss,epoch)     
+    def updatemodel(self,model,inputsize):
+        self.sw.add_graph(model,input_to_model = inputsize,verbose = False)
+    def _save_csv(self,result_path):
+        To_save_csv(self.metric,result_path)
+
 ########################################################## lr adjust################################################################
 """ learning rate schedule """
 def Adjust_learning_rate_consine(optimizer, epoch, init_lr,min_lr,n_epochs, ibatch, NBatch,num_init : int  =1):
@@ -365,6 +384,7 @@ def To_save_csv(datadict,path):
     data.to_csv(path, index=True)
 
 def Train(model,
+          inputsize,
           epochs,
           train_data_loader,
           val_data_loader,
@@ -375,6 +395,7 @@ def Train(model,
           lastmodel_path,
           bestmodel_path,
           resultfig_path,
+          writer_path,
           device,
           lradjust : list = None,):
     start = datetime.datetime.now().timestamp()
@@ -383,7 +404,9 @@ def Train(model,
         file.write(str(model))
     # global best_acc
     best_acc=0
-    trainmetric = DataUpdate()
+    trainmetric = DataUpdate(writer_path=writer_path)
+    trainmetric.updatemodel(model,inputsize=inputsize)
+    summary(model,inputsize[0])
     for epoch in range(1,epochs+1):
         train_start = datetime.datetime.now().timestamp()
         MetricMonitors = MetricMonitor()
@@ -432,8 +455,8 @@ def Train(model,
             valrecallscore=val_recall,
             valf1score=val_f1,
         )
-
-        To_save_csv(trainmetric.metric,result_path)
+        trainmetric._save_csv(result_path)
+        # To_save_csv(trainmetric.metric,result_path)
         train_end = datetime.datetime.now().timestamp()
         print(F'EPOCH {epoch}', 
               f"Training Time:{train_end - train_start:.2f}s",
